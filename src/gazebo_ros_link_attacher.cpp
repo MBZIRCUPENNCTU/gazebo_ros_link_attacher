@@ -109,7 +109,7 @@ namespace gazebo
     ROS_DEBUG_STREAM("Links are: "  << l1->GetName() << " and " << l2->GetName());
 
     ROS_DEBUG_STREAM("Creating revolute joint on model: '" << model1 << "'");
-    j.joint = this->physics->CreateJoint("revolute", m1);
+    j.joint = this->physics->CreateJoint("ball", m1);
     this->joints.push_back(j);
 
     ROS_DEBUG_STREAM("Attach");
