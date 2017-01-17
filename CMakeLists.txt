@@ -30,6 +30,7 @@ find_package(gazebo REQUIRED)
 add_service_files(
   FILES
   Attach.srv
+  AttachTyped.srv
 )
 
 
