@@ -9,7 +9,7 @@
 #include "gazebo_ros_link_attacher/AttachTypedResponse.h"
 
 #define DEFAULT_JOINT_TYPE "revolute"
-
+#define SLEEP_TIME_AFTER_ATTACH 0.05
 namespace gazebo {
 // Register this plugin with the simulator
 GZ_REGISTER_WORLD_PLUGIN (GazeboRosLinkAttacher)
@@ -61,6 +61,7 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1, std::s
 	if (this->getJoint(model1, link1, model2, link2, j)) {
 		ROS_INFO_STREAM("Joint already existed, reusing it.");
 		j.joint->Attach(j.l1, j.l2);
+		ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
 		return true;
 	} else {
 		ROS_INFO_STREAM("Creating new joint.");
@@ -123,6 +124,8 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1, std::s
 	j.joint->Load(l1, l2, math::Pose());
 	ROS_DEBUG_STREAM("SetModel");
 	j.joint->SetModel(m2);
+
+
 	/*
 	 * If SetModel is not done we get:
 	 * ***** Internal Program Error - assertion (this->GetParentModel() != __null)
@@ -144,7 +147,7 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1, std::s
 	ROS_DEBUG_STREAM("Init");
 	j.joint->Init();
 	ROS_INFO_STREAM("Attach finished.");
-
+	ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
 	return true;
 }
 
@@ -153,6 +156,7 @@ bool GazeboRosLinkAttacher::detach(std::string model1, std::string link1, std::s
 	fixedJoint j;
 	if (this->getJoint(model1, link1, model2, link2, j)) {
 		j.joint->Detach();
+		ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
 		return true;
 	}
 
