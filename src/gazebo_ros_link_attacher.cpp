@@ -201,7 +201,7 @@ bool GazeboRosLinkAttacher::detach_callback(gazebo_ros_link_attacher::Attach::Re
 
 bool GazeboRosLinkAttacher::attach_typed_callback(gazebo_ros_link_attacher::AttachTyped::Request &req, gazebo_ros_link_attacher::AttachTyped::Response &res) {
 	ROS_INFO_STREAM(
-			"Received request to attach model: '" << req.model_name_1 << "' using link: '" << req.link_name_1 << "' with model: '" << req.model_name_2 << "' using link: '" << req.link_name_2 << "'");
+			"Received request to attach model: '" << req.model_name_1 << "' using link: '" << req.link_name_1 << "' with model: '" << req.model_name_2 << "' using link: '" << req.link_name_2<<"' and joint '"<<req.joint_type << "'");
 	bool allowed_joint_type = false;
 	for (int var = 0; var < allowed_joint_types.size(); ++var) {
 		if (allowed_joint_types[var].compare(req.joint_type) == 0) {
