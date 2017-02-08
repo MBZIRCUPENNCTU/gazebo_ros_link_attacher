@@ -28,6 +28,22 @@
 
 namespace gazebo {
 
+typedef struct AtachDetachStruct {
+	AtachDetachStruct(std::string model1, std::string link1, std::string model2, std::string link2, std::string joint_type) {
+		this->model1 = model1;
+		this->link1 = link1;
+		this->model2 = model2;
+		this->link2 = link2;
+		this->joint_type = joint_type;
+	}
+
+	std::string model1;
+	std::string link1;
+	std::string model2;
+	std::string link2;
+	std::string joint_type;
+} AtachDetachStruct;
+
 class GazeboRosLinkAttacher: public WorldPlugin {
 public:
 	/// \brief Constructor
@@ -39,8 +55,10 @@ public:
 	/// \brief Load the controller
 	void Load(physics::WorldPtr _world, sdf::ElementPtr /*_sdf*/);
 
+	void OnUpdate();
+
 	/// \brief Attach with a revolute joint
-	bool attach(std::string model1, std::string link1, std::string model2, std::string link2,std::string joint_type);
+	bool attach(std::string model1, std::string link1, std::string model2, std::string link2, std::string joint_type);
 
 	/// \brief Detach
 	bool detach(std::string model1, std::string link1, std::string model2, std::string link2);
@@ -66,11 +84,23 @@ private:
 	ros::ServiceServer detach_service_;
 	ros::ServiceServer attach_typed_service_;
 
-	bool attach_callback(gazebo_ros_link_attacher::Attach::Request &req, gazebo_ros_link_attacher::Attach::Response &res);
-	bool detach_callback(gazebo_ros_link_attacher::Attach::Request &req, gazebo_ros_link_attacher::Attach::Response &res);
+	std::vector<event::ConnectionPtr> connections;
+
+	std::vector<AtachDetachStruct> toDetachVector;
+	std::vector<AtachDetachStruct> toAtachVector;
+	std::mutex mtx_detach;
+	std::mutex mtx_attach;
+
+	void HandleAttaches();
+	void HandleDetaches();
+
+	bool attach_callback(gazebo_ros_link_attacher::Attach::Request &req, gazebo_ros_link_attacher::Attach::Response &res);bool detach_callback(
+			gazebo_ros_link_attacher::Attach::Request &req, gazebo_ros_link_attacher::Attach::Response &res);
 
 	bool attach_typed_callback(gazebo_ros_link_attacher::AttachTyped::Request &req, gazebo_ros_link_attacher::AttachTyped::Response &res);
 
+	common::Time prevUpdateTime;
+	common::Time updateRate;
 
 	std::vector<fixedJoint> joints;
 

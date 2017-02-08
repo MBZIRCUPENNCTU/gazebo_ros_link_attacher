@@ -9,10 +9,11 @@
 #include "gazebo_ros_link_attacher/AttachTypedResponse.h"
 
 #define DEFAULT_JOINT_TYPE "revolute"
-#define SLEEP_TIME_AFTER_ATTACH 0.05
+//#define SLEEP_TIME_AFTER_ATTACH 0.05
 namespace gazebo {
+
 // Register this plugin with the simulator
-GZ_REGISTER_WORLD_PLUGIN (GazeboRosLinkAttacher)
+GZ_REGISTER_WORLD_PLUGIN(GazeboRosLinkAttacher)
 
 // Constructor
 GazeboRosLinkAttacher::GazeboRosLinkAttacher() :
@@ -33,6 +34,7 @@ void GazeboRosLinkAttacher::Load(physics::WorldPtr _world, sdf::ElementPtr /*_sd
 
 	this->world = _world;
 	this->physics = this->world->GetPhysicsEngine();
+
 	this->attach_service_ = this->nh_.advertiseService("attach", &GazeboRosLinkAttacher::attach_callback, this);
 	ROS_INFO_STREAM("Attach service at: " << this->nh_.resolveName("attach"));
 	this->detach_service_ = this->nh_.advertiseService("detach", &GazeboRosLinkAttacher::detach_callback, this);
@@ -41,6 +43,9 @@ void GazeboRosLinkAttacher::Load(physics::WorldPtr _world, sdf::ElementPtr /*_sd
 	ROS_INFO_STREAM("AttachTyped service at: " << this->nh_.resolveName("attach_typed"));
 	ROS_INFO("Link attacher node initialized.");
 
+	this->prevUpdateTime = common::Time::GetWallTime();
+	this->updateRate = common::Time(0, common::Time::SecToNano(0.75));
+
 	allowed_joint_types.push_back("revolute");
 	allowed_joint_types.push_back("ball");
 	allowed_joint_types.push_back("gearbox");
@@ -48,7 +53,43 @@ void GazeboRosLinkAttacher::Load(physics::WorldPtr _world, sdf::ElementPtr /*_sd
 	allowed_joint_types.push_back("revolute2");
 	allowed_joint_types.push_back("universal");
 	allowed_joint_types.push_back("piston");
+	ROS_INFO_STREAM("ConnectWorldUpdateEnd");
 
+	this->connections.push_back(event::Events::ConnectWorldUpdateEnd(boost::bind(&GazeboRosLinkAttacher::OnUpdate, this)));
+}
+
+void GazeboRosLinkAttacher::OnUpdate() {
+	if (common::Time::GetWallTime() - this->prevUpdateTime < this->updateRate) {
+		return;
+	}
+
+	mtx_attach.lock();
+	if (this->toAtachVector.size() > 0) {
+		this->HandleAttaches();
+	}
+	mtx_attach.unlock();
+
+	mtx_detach.lock();
+	if (this->toDetachVector.size() > 0) {
+		this->HandleDetaches();
+	}
+	mtx_detach.unlock();
+
+	this->prevUpdateTime = common::Time::GetWallTime();
+}
+
+void GazeboRosLinkAttacher::HandleAttaches() {
+	for (int var = 0; var < toAtachVector.size(); ++var) {
+		attach(toAtachVector[var].model1, toAtachVector[var].link1, toAtachVector[var].model2, toAtachVector[var].link2, toAtachVector[var].joint_type);
+	}
+	toAtachVector.clear();
+}
+
+void GazeboRosLinkAttacher::HandleDetaches() {
+	for (int var = 0; var < toDetachVector.size(); ++var) {
+		detach(toDetachVector[var].model1, toDetachVector[var].link1, toDetachVector[var].model2, toDetachVector[var].link2);
+	}
+	toDetachVector.clear();
 }
 
 bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1, std::string model2, std::string link2, std::string joint_type) {
@@ -61,10 +102,8 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1, std::s
 	if (this->getJoint(model1, link1, model2, link2, j)) {
 		ROS_INFO_STREAM("Joint already existed, reusing it.");
 		j.joint->Attach(j.l1, j.l2);
-		ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
+		//ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
 		return true;
-	} else {
-		ROS_INFO_STREAM("Creating new joint.");
 	}
 	j.model1 = model1;
 	j.link1 = link1;
@@ -125,7 +164,6 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1, std::s
 	ROS_DEBUG_STREAM("SetModel");
 	j.joint->SetModel(m2);
 
-
 	/*
 	 * If SetModel is not done we get:
 	 * ***** Internal Program Error - assertion (this->GetParentModel() != __null)
@@ -146,8 +184,8 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1, std::s
 	j.joint->SetLowStop(0, 0);
 	ROS_DEBUG_STREAM("Init");
 	j.joint->Init();
-	ROS_INFO_STREAM("Attach finished.");
-	ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
+	//ROS_INFO_STREAM("Attach finished.");
+	//ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
 	return true;
 }
 
@@ -156,7 +194,7 @@ bool GazeboRosLinkAttacher::detach(std::string model1, std::string link1, std::s
 	fixedJoint j;
 	if (this->getJoint(model1, link1, model2, link2, j)) {
 		j.joint->Detach();
-		ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
+		//ros::Duration(SLEEP_TIME_AFTER_ATTACH).sleep();
 		return true;
 	}
 
@@ -179,28 +217,22 @@ bool GazeboRosLinkAttacher::getJoint(std::string model1, std::string link1, std:
 bool GazeboRosLinkAttacher::attach_callback(gazebo_ros_link_attacher::Attach::Request &req, gazebo_ros_link_attacher::Attach::Response &res) {
 	ROS_INFO_STREAM(
 			"Received request to attach model: '" << req.model_name_1 << "' using link: '" << req.link_name_1 << "' with model: '" << req.model_name_2 << "' using link: '" << req.link_name_2 << "'");
-	if (!this->attach(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2, DEFAULT_JOINT_TYPE)) {
-		ROS_ERROR_STREAM("Could not make the attach.");
-		res.ok = false;
-	} else {
-		ROS_INFO_STREAM("Attach was succesful");
-		res.ok = true;
-	}
+
+	mtx_attach.lock();
+	this->toAtachVector.push_back(AtachDetachStruct(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2, DEFAULT_JOINT_TYPE));
+	mtx_attach.unlock();
+	/*
+	 if (!this->attach(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2, DEFAULT_JOINT_TYPE)) {
+	 ROS_ERROR_STREAM("Could not make the attach.");
+	 res.ok = false;
+	 } else {
+	 ROS_INFO_STREAM("Attach was succesful");
+	 res.ok = true;
+	 }
+	 */
+	res.ok = true;
 	return true;
 
-}
-
-bool GazeboRosLinkAttacher::detach_callback(gazebo_ros_link_attacher::Attach::Request &req, gazebo_ros_link_attacher::Attach::Response &res) {
-	ROS_INFO_STREAM(
-			"Received request to detach model: '" << req.model_name_1 << "' using link: '" << req.link_name_1 << "' with model: '" << req.model_name_2 << "' using link: '" << req.link_name_2 << "'");
-	if (!this->detach(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2)) {
-		ROS_ERROR_STREAM("Could not make the detach.");
-		res.ok = false;
-	} else {
-		ROS_INFO_STREAM("Detach was succesful");
-		res.ok = true;
-	}
-	return true;
 }
 
 bool GazeboRosLinkAttacher::attach_typed_callback(gazebo_ros_link_attacher::AttachTyped::Request &req, gazebo_ros_link_attacher::AttachTyped::Response &res) {
@@ -218,15 +250,41 @@ bool GazeboRosLinkAttacher::attach_typed_callback(gazebo_ros_link_attacher::Atta
 		res.ok = false;
 		return true;
 	}
-	if (!this->attach(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2, req.joint_type)) {
-		ROS_ERROR_STREAM("Could not make the attach.");
-		res.ok = false;
-	} else {
-		ROS_INFO_STREAM("Attach was succesful");
-		res.ok = true;
-	}
-	return true;
 
+	mtx_attach.lock();
+	this->toAtachVector.push_back(AtachDetachStruct(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2, req.joint_type));
+	mtx_attach.unlock();
+
+	/*
+	 if (!this->attach(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2, req.joint_type)) {
+	 ROS_ERROR_STREAM("Could not make the attach.");
+	 res.ok = false;
+	 } else {
+	 ROS_INFO_STREAM("Attach was succesful");
+	 res.ok = true;
+	 }
+	 */
+	return true;
+}
+
+bool GazeboRosLinkAttacher::detach_callback(gazebo_ros_link_attacher::Attach::Request &req, gazebo_ros_link_attacher::Attach::Response &res) {
+	ROS_INFO_STREAM(
+			"Received request to detach model: '" << req.model_name_1 << "' using link: '" << req.link_name_1 << "' with model: '" << req.model_name_2 << "' using link: '" << req.link_name_2 << "'");
+
+	mtx_detach.lock();
+	this->toDetachVector.push_back(AtachDetachStruct(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2, ""));
+	mtx_detach.unlock();
+
+	/*
+	 if (!this->detach(req.model_name_1, req.link_name_1, req.model_name_2, req.link_name_2)) {
+	 ROS_ERROR_STREAM("Could not make the detach.");
+	 res.ok = false;
+	 } else {
+	 ROS_INFO_STREAM("Detach was succesful");
+	 res.ok = true;
+	 }
+	 */
+	return true;
 }
 
 }
