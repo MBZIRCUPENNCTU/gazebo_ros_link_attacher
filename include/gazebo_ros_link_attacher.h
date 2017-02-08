@@ -25,6 +25,7 @@
 #include "gazebo_ros_link_attacher/AttachTyped.h"
 #include "gazebo_ros_link_attacher/AttachTypedRequest.h"
 #include "gazebo_ros_link_attacher/AttachTypedResponse.h"
+#include <mutex>
 
 namespace gazebo {
 
